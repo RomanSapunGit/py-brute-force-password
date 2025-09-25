@@ -36,9 +36,9 @@ def validate_password_chunk(args):
     return found
 
 def brute_force_password():
-    cpu_number = multiprocessing.cpu_count()
-    chunk_size = MAX_PASSWORD // cpu_number
-    start_ranges = [i * chunk_size for i in range(cpu_number)]
+    cpu_number = min(multiprocessing.cpu_count(), MAX_PASSWORD)
+    chunk_size = max(1, MAX_PASSWORD // cpu_number)
+    start_ranges = list(range(0, MAX_PASSWORD, chunk_size))
 
     params = [(start, chunk_size, set(PASSWORDS_TO_BRUTE_FORCE)) for start in start_ranges]
 
@@ -47,7 +47,11 @@ def brute_force_password():
         for worker_result in exe.map(validate_password_chunk, params):
             combined_results.update(worker_result)
 
-    results = [combined_results.get(h, "Not found") for h in PASSWORDS_TO_BRUTE_FORCE]
+    results = []
+    for h in PASSWORDS_TO_BRUTE_FORCE:
+        assert combined_results[h]
+        results.append(combined_results[h])
+
     print(results)
 
 

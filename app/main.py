@@ -23,36 +23,44 @@ def sha256_hash_str(to_hash: str) -> str:
     return sha256(to_hash.encode("utf-8")).hexdigest()
 
 
-def validate_password_chunk(args):
-    start_range, chunk_size, hashes = args
+def validate_chunk(args):
+    start, end, target_hashes = args
     found = {}
-    for i in range(start_range, start_range + chunk_size):
+    for i in range(start, end):
         password = str(i).zfill(8)
-        h = sha256(password.encode("utf-8")).hexdigest()
-        if h in hashes and h not in found:
+        h = sha256_hash_str(password)
+        if h in target_hashes and h not in found:
             found[h] = password
-        if len(found) == len(hashes):
-            break
+            if len(found) == len(target_hashes):
+                break
     return found
 
+
 def brute_force_password():
-    cpu_number = min(multiprocessing.cpu_count(), MAX_PASSWORD)
-    chunk_size = max(1, MAX_PASSWORD // cpu_number)
-    start_ranges = list(range(0, MAX_PASSWORD, chunk_size))
+    cpu_count = multiprocessing.cpu_count()
+    cpu_number = min(cpu_count, MAX_PASSWORD)
 
-    params = [(start, chunk_size, set(PASSWORDS_TO_BRUTE_FORCE)) for start in start_ranges]
+    base, remainder = divmod(MAX_PASSWORD, cpu_number)
+    ranges = []
+    start = 0
+    for i in range(cpu_number):
+        size = base + (1 if i < remainder else 0)
+        end = start + size
+        ranges.append((start, end))
+        start = end
 
-    combined_results = {}
+    target_hashes = set(PASSWORDS_TO_BRUTE_FORCE)
+    params = [(s, e, target_hashes) for (s, e) in ranges]
+
+    combined = {}
     with concurrent.futures.ProcessPoolExecutor(max_workers=cpu_number) as exe:
-        for worker_result in exe.map(validate_password_chunk, params):
-            combined_results.update(worker_result)
+        for res in exe.map(validate_chunk, params):
+            if res:
+                combined.update(res)
 
-    results = []
-    for h in PASSWORDS_TO_BRUTE_FORCE:
-        assert combined_results[h]
-        results.append(combined_results[h])
-
+    results = [combined.get(h, "Not found") for h in PASSWORDS_TO_BRUTE_FORCE]
     print(results)
+    return results
 
 
 if __name__ == "__main__":
